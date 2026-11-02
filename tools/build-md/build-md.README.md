@@ -12,7 +12,7 @@ Linux Node (ESM, no npm deps) CLI. Input: MP3 files (by default in `./01-mp3s/`)
 
 Files:
 - `build-md` — the tool (single Node.js ESM file, executable).
-- `build-md.regress.sh` — regression test script (run it after every change).
+- `build-md.test.js` — Node.js test runner suite using `node:test` and `node:assert`.
 - `build-md.README.md` — this reference document.
 
 ## CLI
@@ -43,4 +43,4 @@ title: Monday, January 1, 2024
 ```
 
 ## Testing
-Always run `./build-md.regress.sh` from `tools/build-md/`.
+Run `node --test tools/build-md/build-md.test.js` or `npm test`.
