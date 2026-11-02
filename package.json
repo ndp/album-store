@@ -21,6 +21,9 @@
   "type": "mts",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "bash tools/split-songs/split-songs.regress.sh",
+    "build-01": "tools/split-songs/split-songs --outDir=./01-mp3s 00-waves/*.wav",
+    "clean-00": "rm 00-waves/*.wav",
+    "clean-01": "rm 01-mp3s/*.mp3"
   }
 }
