@@ -40,10 +40,10 @@ node "$tool" --in-dir="$tmp/mp3s" --out-dir="$tmp/dates" --media-dir="$tmp/media
 [[ -f "$tmp/dates/261001.md" ]] && ok "date-file-261001" || bad "date-file-261001"
 
 # Check moved files in media dir
-[[ -f "$tmp/media/240101-s01-untitled.mp3" ]] && ok "moved-240101-s01" || bad "moved-240101-s01"
-[[ -f "$tmp/media/240101-s02-untitled.mp3" ]] && ok "moved-240101-s02" || bad "moved-240101-s02"
-[[ -f "$tmp/media/240101-s16-untitled.mp3" ]] && ok "moved-240101-s16" || bad "moved-240101-s16"
-[[ -f "$tmp/media/261001-s01-intro.mp3" ]] && ok "moved-261001-s01" || bad "moved-261001-s01"
+[[ -f "$tmp/media/240101/s01-untitled.mp3" ]] && ok "moved-240101-s01" || bad "moved-240101-s01"
+[[ -f "$tmp/media/240101/s02-untitled.mp3" ]] && ok "moved-240101-s02" || bad "moved-240101-s02"
+[[ -f "$tmp/media/240101/s16-untitled.mp3" ]] && ok "moved-240101-s16" || bad "moved-240101-s16"
+[[ -f "$tmp/media/261001/s01-intro.mp3" ]] && ok "moved-261001-s01" || bad "moved-261001-s01"
 
 # Check source files were removed from mp3s dir
 [[ ! -f "$tmp/mp3s/240101-s01-untitled.mp3" ]] && ok "removed-from-src" || bad "removed-from-src"
@@ -61,9 +61,9 @@ title: Monday, January 1, 2024
 
 ## Personnel: TBD
 
-1. [240101-s01-untitled.mp3](media/240101-s01-untitled.mp3)
-2. [240101-s02-untitled.mp3](media/240101-s02-untitled.mp3)
-3. [240101-s16-untitled.mp3](media/240101-s16-untitled.mp3)
+1. [s01-untitled.mp3](media/240101/s01-untitled.mp3)
+2. [s02-untitled.mp3](media/240101/s02-untitled.mp3)
+3. [s16-untitled.mp3](media/240101/s16-untitled.mp3)
 EOF
 )
 
@@ -89,7 +89,7 @@ title: Thursday, October 1, 2026
 
 ## Personnel: TBD
 
-1. [261001-s01-intro.mp3](media/261001-s01-intro.mp3)
+1. [s01-intro.mp3](media/261001/s01-intro.mp3)
 EOF
 )
 
@@ -104,10 +104,10 @@ fi
 mkdir -p "$tmp/mp3s2"
 touch "$tmp/mp3s2/261001-s01-intro.mp3"
 node "$tool" --in-dir="$tmp/mp3s2" --out-dir="$tmp/custom_dates" --media-dir="$tmp/media2" --media-prefix="/audio/media" --personnel="Alice, Bob" --yaml-preamble='layout: concert' >/dev/null
-grep -q '1. \[261001-s01-intro.mp3\](/audio/media/261001-s01-intro.mp3)' "$tmp/custom_dates/261001.md" && ok "custom-media-prefix" || bad "custom-media-prefix"
+grep -q '1. \[s01-intro.mp3\](/audio/media/261001/s01-intro.mp3)' "$tmp/custom_dates/261001.md" && ok "custom-media-prefix" || bad "custom-media-prefix"
 grep -q '## Personnel: Alice, Bob' "$tmp/custom_dates/261001.md" && ok "custom-personnel" || bad "custom-personnel"
 grep -q 'layout: concert' "$tmp/custom_dates/261001.md" && ok "custom-preamble" || bad "custom-preamble"
-[[ -f "$tmp/media2/261001-s01-intro.mp3" ]] && ok "moved-custom-media-dir" || bad "moved-custom-media-dir"
+[[ -f "$tmp/media2/261001/s01-intro.mp3" ]] && ok "moved-custom-media-dir" || bad "moved-custom-media-dir"
 
 # 7. positional file args
 mkdir -p "$tmp/mp3s3"
@@ -118,7 +118,7 @@ mkdir -p "$tmp/media_pos"
 node "$tool" --out-dir="$tmp/dates_pos" --media-dir="$tmp/media_pos" "$tmp/mp3s3/240101-s01-untitled.mp3" "$tmp/mp3s3/240101-s02-untitled.mp3" >/dev/null
 [[ -f "$tmp/dates_pos/240101.md" ]] && ok "positional-args-file" || bad "positional-args-file"
 grep -q '# Monday, January 1, 2024' "$tmp/dates_pos/240101.md" && ok "positional-args-h1" || bad "positional-args-h1"
-[[ -f "$tmp/media_pos/240101-s01-untitled.mp3" ]] && ok "moved-positional" || bad "moved-positional"
+[[ -f "$tmp/media_pos/240101/s01-untitled.mp3" ]] && ok "moved-positional" || bad "moved-positional"
 [[ ! -f "$tmp/mp3s3/240101-s01-untitled.mp3" ]] && ok "removed-positional" || bad "removed-positional"
 
 echo

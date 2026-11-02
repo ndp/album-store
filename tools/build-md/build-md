@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Generates Markdown files in src/dates/ and moves MP3s to src/media/ from 01-mp3s/. See --help.
+// Generates Markdown files in src/dates/ and moves MP3s to src/media/<date>/ from 01-mp3s/. See --help.
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -28,8 +28,8 @@ Each Markdown file contains:
   - Configurable YAML preamble frontmatter
   - Level 1 heading (#) with the long form date (e.g. # Monday, January 1, 2024)
   - Level 2 heading (##) for personnel (e.g. ## Personnel: TBD)
-  - Ordered list of song links with targets in media/
-Also moves the processed MP3 files into src/media/ (or --media-dir).
+  - Ordered list of song links with targets in media/<date>/
+Also moves the processed MP3 files into src/media/<date>/ (or --media-dir/<date>/).
 
 Options
   --help, -h            Show this help
@@ -177,6 +177,11 @@ function collectFiles() {
   return fileList;
 }
 
+function getTargetFilename(filename, date) {
+  const stripped = filename.replace(new RegExp(`^${date}[-_]?`), '');
+  return (stripped && stripped !== path.extname(filename)) ? stripped : filename;
+}
+
 function moveFile(source, dest) {
   if (path.resolve(source) === path.resolve(dest)) return;
   try {
@@ -227,11 +232,17 @@ function main() {
     const songs = dateGroups.get(date);
     songs.sort((a, b) => a.filename.localeCompare(b.filename, undefined, { numeric: true, sensitivity: 'base' }));
 
+    const dateMediaDir = path.join(SETTINGS.mediaDir, date);
+    fs.mkdirSync(dateMediaDir, { recursive: true });
+
     const longDate = formatLongDate(date);
     const preamble = renderYamlPreamble(date, longDate);
     const headerSection = `# ${longDate}\n\n## Personnel: ${SETTINGS.personnel}\n\n`;
 
-    const songLines = songs.map((song, idx) => `${idx + 1}. [${song.filename}](${mediaPrefix}/${song.filename})`);
+    const songLines = songs.map((song, idx) => {
+      const targetName = getTargetFilename(song.filename, date);
+      return `${idx + 1}. [${targetName}](${mediaPrefix}/${date}/${targetName})`;
+    });
     const content = `${preamble}${headerSection}${songLines.join('\n')}\n`;
 
     const outFile = path.join(SETTINGS.outDir, `${date}.md`);
@@ -242,7 +253,8 @@ function main() {
     }
 
     for (const song of songs) {
-      const destFile = path.join(SETTINGS.mediaDir, song.filename);
+      const targetName = getTargetFilename(song.filename, date);
+      const destFile = path.join(dateMediaDir, targetName);
       moveFile(song.sourcePath, destFile);
       if (FLAGS.verbose) {
         console.log(`Moved ${song.sourcePath} -> ${destFile}`);

@@ -4,11 +4,11 @@ Audience: an AI agent modifying or debugging this tool. Read fully before editin
 Installed tool directory: `~/workspace/album-store/tools/build-md/`. The executable is `build-md` (no extension); the adjacent regression script and this README are part of the tool.
 
 ## Purpose
-Linux Node (ESM, no npm deps) CLI. Input: MP3 files (by default in `./01-mp3s/`). Output: Markdown files in `src/dates/` (e.g. `src/dates/240101.md`) and MP3 files moved into `src/media/` (e.g. `src/media/240101-s16-untitled.mp3`). Each markdown file contains:
+Linux Node (ESM, no npm deps) CLI. Input: MP3 files (by default in `./01-mp3s/`). Output: Markdown files in `src/dates/` (e.g. `src/dates/240101.md`) and MP3 files moved into `src/media/<date>/` (e.g. `src/media/240101/s01-untitled.mp3`). Each markdown file contains:
 - Configurable YAML preamble frontmatter
 - Level 1 heading (`#`) with the long-form date (e.g. `# Monday, January 1, 2024`)
 - Level 2 heading (`##`) for personnel (e.g. `## Personnel: TBD`)
-- Ordered list of song links with URLs located in `media/` (e.g. `1. [240101-s16-untitled.mp3](media/240101-s16-untitled.mp3)`)
+- Ordered list of song links with URLs located in `media/<date>/` (e.g. `1. [s01-untitled.mp3](media/240101/s01-untitled.mp3)`)
 
 Files:
 - `build-md` — the tool (single Node.js ESM file, executable).
@@ -26,7 +26,7 @@ Options use `--key=value` syntax. kebab-case is converted to camelCase keys of `
 - First 6 digits of the filename = recording date (`240101-s01-untitled.mp3` → `240101`).
 - Files are grouped by date and sorted naturally.
 - Destination for Markdown: `<out-dir>/<date>.md` (default: `./src/dates/<date>.md`).
-- Destination for MP3s: `<media-dir>/<filename>` (default: `./src/media/<filename>`).
+- Destination for MP3s: `<media-dir>/<date>/<song>.mp3` (default: `./src/media/<date>/<song>.mp3`).
 - Content format:
 ```markdown
 ---
@@ -38,8 +38,8 @@ title: Monday, January 1, 2024
 
 ## Personnel: TBD
 
-1. [240101-s01-untitled.mp3](media/240101-s01-untitled.mp3)
-2. [240101-s02-untitled.mp3](media/240101-s02-untitled.mp3)
+1. [s01-untitled.mp3](media/240101/s01-untitled.mp3)
+2. [s02-untitled.mp3](media/240101/s02-untitled.mp3)
 ```
 
 ## Testing
