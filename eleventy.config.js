@@ -5,6 +5,9 @@ export default async function (eleventyConfig) {
   eleventyConfig.addCollection("allDates", (collectionApi) => {
     return collectionApi.getFilteredByGlob("src/dates/*.md");
   });
+  eleventyConfig.addFilter("repeat", (str, times) => {
+    return str.repeat(times);
+  });
   return {
     markdownTemplateEngine: "njk"
   }

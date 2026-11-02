@@ -14,6 +14,11 @@
   </style>
 </head>
 <body>
+  {% if not isHome %}
+  {% set depth = page.url.split('/').length - 2 %}
+  {% set home = '../' | repeat(depth) %}
+  <p><a href="{{ home }}" onclick="history.back(); return false;">← Back to home</a></p>
+  {% endif %}
   {{ content | safe }}
 </body>
 </html>
