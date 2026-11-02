@@ -1,0 +1,168 @@
+#!/usr/bin/env node
+// Generates Markdown files in src/dates/ and moves MP3s to src/media/ from 01-mp3s/. See --help.
+import fs from 'node:fs';
+import path from 'node:path';
+
+const SETTINGS = {
+  inDir: './01-mp3s',
+  outDir: './src/dates',
+  mediaDir: './src/media',
+  mediaPrefix: 'media',
+};
+
+const FLAGS = { verbose: false };
+
+const HELP = `Usage: build-md [options] [file.mp3 ...]
+
+Scans MP3 files (by default in 01-mp3s/) and generates corresponding Markdown
+files in src/dates/ named after the 6-digit date prefix (e.g. 240101.md).
+Each Markdown file contains an ordered list of song links with targets in media/
+(e.g. 1. [240101-s16-untitled.mp3](media/240101-s16-untitled.mp3)).
+Also moves the processed MP3 files into src/media/ (or --media-dir).
+
+Options
+  --help, -h            Show this help
+  --verbose, -v         Print verbose output
+  --in-dir=path         Folder containing source MP3s        (default: ./01-mp3s)
+                        (--inDir=path also works)
+  --out-dir=path        Folder for the generated Markdown    (default: ./src/dates)
+                        (--outDir=path also works)
+  --media-dir=path      Folder to move MP3 files into        (default: ./src/media)
+                        (--mediaDir=path also works)
+  --media-prefix=path   Prefix for media links in Markdown   (default: media)
+                        (--mediaPrefix=path also works)
+
+Examples
+  build-md
+  build-md --in-dir=./01-mp3s --out-dir=./src/dates --media-dir=./src/media
+  build-md 01-mp3s/240101-*.mp3
+
+Exits with code 1 on failure.
+`;
+
+const c = (code, s) => (process.stdout.isTTY ? `\x1b[${code}m${s}\x1b[0m` : s);
+const fail = (msg) => { console.error(c(31, msg)); process.exit(1); };
+
+const positionalArgs = [];
+for (const a of process.argv.slice(2)) {
+  if (a === '-v') { FLAGS.verbose = true; continue; }
+  if (a === '--help' || a === '-h') { console.log(HELP); process.exit(0); }
+  const m = a.match(/^--([\w-]+)(?:=(.*))?$/);
+  if (!m) { positionalArgs.push(a); continue; }
+  const [, k, v] = m;
+  if (k === 'verbose') { FLAGS.verbose = true; continue; }
+  const key = k.replace(/-(\w)/g, (_, ch) => ch.toUpperCase());
+  if (key === 'inDir' || key === 'outDir' || key === 'mediaDir' || key === 'mediaPrefix') {
+    if (v === undefined || v === '') fail(`Bad value for --${k}`);
+    SETTINGS[key] = v;
+    continue;
+  }
+  fail(`Unknown option --${k}`);
+}
+
+function collectFiles() {
+  const fileList = [];
+  if (positionalArgs.length > 0) {
+    for (const arg of positionalArgs) {
+      if (!fs.existsSync(arg)) {
+        fail(`File or directory not found: ${arg}`);
+      }
+      const stat = fs.statSync(arg);
+      if (stat.isDirectory()) {
+        const entries = fs.readdirSync(arg);
+        for (const entry of entries) {
+          if (entry.startsWith('.')) continue;
+          fileList.push({ filename: entry, sourcePath: path.join(arg, entry) });
+        }
+      } else {
+        fileList.push({ filename: path.basename(arg), sourcePath: arg });
+      }
+    }
+  } else {
+    if (!fs.existsSync(SETTINGS.inDir)) {
+      fail(`Input directory not found: ${SETTINGS.inDir}`);
+    }
+    const entries = fs.readdirSync(SETTINGS.inDir);
+    for (const entry of entries) {
+      if (entry.startsWith('.')) continue;
+      fileList.push({ filename: entry, sourcePath: path.join(SETTINGS.inDir, entry) });
+    }
+  }
+  return fileList;
+}
+
+function moveFile(source, dest) {
+  if (path.resolve(source) === path.resolve(dest)) return;
+  try {
+    fs.renameSync(source, dest);
+  } catch (err) {
+    if (err.code === 'EXDEV') {
+      fs.copyFileSync(source, dest);
+      fs.unlinkSync(source);
+    } else {
+      throw err;
+    }
+  }
+}
+
+function main() {
+  const files = collectFiles();
+  const dateGroups = new Map();
+
+  for (const item of files) {
+    const match = item.filename.match(/^(\d{6})/);
+    if (!match) {
+      if (FLAGS.verbose) {
+        console.log(`Skipping file without 6-digit date prefix: ${item.filename}`);
+      }
+      continue;
+    }
+    const date = match[1];
+    if (!dateGroups.has(date)) {
+      dateGroups.set(date, []);
+    }
+    dateGroups.get(date).push(item);
+  }
+
+  if (dateGroups.size === 0) {
+    if (FLAGS.verbose) {
+      console.log('No dated files found to process.');
+    }
+    return;
+  }
+
+  fs.mkdirSync(SETTINGS.outDir, { recursive: true });
+  fs.mkdirSync(SETTINGS.mediaDir, { recursive: true });
+
+  const mediaPrefix = SETTINGS.mediaPrefix ? SETTINGS.mediaPrefix.replace(/\/+$/, '') : 'media';
+
+  const sortedDates = Array.from(dateGroups.keys()).sort();
+  for (const date of sortedDates) {
+    const songs = dateGroups.get(date);
+    songs.sort((a, b) => a.filename.localeCompare(b.filename, undefined, { numeric: true, sensitivity: 'base' }));
+
+    const lines = songs.map((song, idx) => `${idx + 1}. [${song.filename}](${mediaPrefix}/${song.filename})`);
+    const content = lines.join('\n') + '\n';
+
+    const outFile = path.join(SETTINGS.outDir, `${date}.md`);
+    fs.writeFileSync(outFile, content, 'utf8');
+
+    if (FLAGS.verbose) {
+      console.log(`Wrote ${outFile} (${songs.length} song${songs.length === 1 ? '' : 's'})`);
+    }
+
+    for (const song of songs) {
+      const destFile = path.join(SETTINGS.mediaDir, song.filename);
+      moveFile(song.sourcePath, destFile);
+      if (FLAGS.verbose) {
+        console.log(`Moved ${song.sourcePath} -> ${destFile}`);
+      }
+    }
+  }
+}
+
+try {
+  main();
+} catch (err) {
+  fail(err.message);
+}
