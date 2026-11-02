@@ -7,7 +7,7 @@ const SETTINGS = {
   inDir: './01-mp3s',
   outDir: './src/dates',
   mediaDir: './src/media',
-  mediaPrefix: '/media',
+  mediaPrefix: '../../media',
   personnel: 'TBD',
   // YAML frontmatter preamble placed at the top of generated markdown files.
   // Can be an object of key/values, a template string, or null/false to disable.
