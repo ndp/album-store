@@ -55,19 +55,21 @@ expected_240101=$(cat <<'EOF'
 ---
 date: 2024-01-01
 title: Monday, January 1, 2024
+layout: base.njk
 ---
 
 # Monday, January 1, 2024
 
 ## Personnel: TBD
 
-1. [s01-untitled.mp3](media/240101/s01-untitled.mp3)
-2. [s02-untitled.mp3](media/240101/s02-untitled.mp3)
-3. [s16-untitled.mp3](media/240101/s16-untitled.mp3)
+1. [s01-untitled.mp3](../../media/240101/s01-untitled.mp3)
+2. [s02-untitled.mp3](../../media/240101/s02-untitled.mp3)
+3. [s16-untitled.mp3](../../media/240101/s16-untitled.mp3)
 EOF
 )
 
 actual_240101=$(cat "$tmp/dates/240101.md")
+
 if [[ "$actual_240101" == "$expected_240101" ]]; then
   ok "content-240101"
 else
@@ -83,13 +85,14 @@ expected_261001=$(cat <<'EOF'
 ---
 date: 2026-10-01
 title: Thursday, October 1, 2026
+layout: base.njk
 ---
 
 # Thursday, October 1, 2026
 
 ## Personnel: TBD
 
-1. [s01-intro.mp3](media/261001/s01-intro.mp3)
+1. [s01-intro.mp3](../../media/261001/s01-intro.mp3)
 EOF
 )
 

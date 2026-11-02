@@ -15,6 +15,7 @@ const SETTINGS = {
   yamlPreamble: {
     date: '{{isoDate}}',
     title: '{{formattedDate}}',
+    layout: 'base.njk',
   },
 };
 

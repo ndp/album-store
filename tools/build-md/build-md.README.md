@@ -4,7 +4,7 @@ Audience: an AI agent modifying or debugging this tool. Read fully before editin
 Installed tool directory: `~/workspace/album-store/tools/build-md/`. The executable is `build-md` (no extension); the adjacent regression script and this README are part of the tool.
 
 ## Purpose
-Linux Node (ESM, no npm deps) CLI. Input: MP3 files (by default in `./01-mp3s/`). Output: Markdown files in `src/dates/` (e.g. `src/dates/240101.md`) and MP3 files moved into `src/media/<date>/` (e.g. `src/media/240101/s01-untitled.mp3`). Each markdown file contains:
+Linux Node (ESM, no npm deps) CLI. Input: MP3 files (by default in `./01-mp3s/`). Output: Markdown files in `src/dates/` (e.g. `../../src/dates/261015.md`) and MP3 files moved into `src/media/<date>/` (e.g. `261015`). Each markdown file contains:
 - Configurable YAML preamble frontmatter
 - Level 1 heading (`#`) with the long-form date (e.g. `# Monday, January 1, 2024`)
 - Level 2 heading (`##`) for personnel (e.g. `## Personnel: TBD`)
