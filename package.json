@@ -21,10 +21,15 @@
   "type": "mts",
   "main": "index.js",
   "scripts": {
+    "serve": "npx @11ty/eleventy --serve",
+    "build": "npx @11ty/eleventy",
     "test": "bash tools/split-songs/split-songs.regress.sh && bash tools/build-md/build-md.regress.sh",
     "build-01": "tools/split-songs/split-songs --outDir=./01-mp3s 00-waves/*.wav",
     "build-md": "tools/build-md/build-md",
     "clean-00": "rm 00-waves/*.wav",
     "clean-01": "rm 01-mp3s/*.mp3"
+  },
+  "devDependencies": {
+    "@11ty/eleventy": "^3.1.7"
   }
 }
