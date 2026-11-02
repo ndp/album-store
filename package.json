@@ -1,0 +1,26 @@
+{
+  "name": "album-store",
+  "version": "0.9.0",
+  "description": "MP3 storage for band's songs",
+  "keywords": [
+    "mp3",
+    "audio",
+    "band",
+    "processing"
+  ],
+  "homepage": "https://github.com/ndp/album-store#readme",
+  "bugs": {
+    "url": "https://github.com/ndp/album-store/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ndp/album-store.git"
+  },
+  "license": "ISC",
+  "author": "andrew j peterson",
+  "type": "mts",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  }
+}

@@ -1,0 +1,262 @@
+#!/usr/bin/env node
+// Splits long concert .wav recordings into per-song MP3s using ffmpeg only. See --help.
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+
+const SETTINGS = {
+  threshold: -25, // dB RMS in the mid band; above this counts as music
+  silence: 20, // seconds below threshold that end a song
+  minMinutes: 3, // shortest thing counted as a song
+  lufs: -16, // target loudness of exported songs
+  pre: 0.3, // seconds of padding before a song
+  post: 1, // seconds of padding after a song
+  extend: 60, // max seconds a song start may be pulled earlier to catch a drums/bass-only intro
+  lowThreshold: -28, // dB RMS (60-500 Hz, above wind rumble) the drums/bass must exceed to count as an intro
+};
+const FLAGS = { analyze: false, verbose: false, outDir: null };
+
+const HELP = `Usage: split-songs.mjs [options] <file.wav> [file.wav ...]
+
+Splits long live recordings into one MP3 per song, saved next to the source files
+(or in --out-dir).
+
+Filenames start with a 6-digit recording date (e.g. 261001_0071.wav). Files that
+share a date and folder are stitched together in name order, and their songs are
+numbered from s01 across the whole day: 261001-s01-untitled.mp3, 261001-s02-untitled.mp3, ...
+Songs that run across the end of one file into the next are marked "spliced".
+Names without a leading 6-digit date are treated as a day of their own.
+
+How songs are found
+  Music is loud between 500 and 3400 Hz; banter, wind, mic bumps and rumble are
+  not. A song runs while that band stays above --threshold, and ends after a
+  --silence gap. Each start is then moved earlier while the 60-500 Hz band
+  (drums/bass, minus sub-60 Hz wind) stays loud, so drum-only intros are kept.
+  Starts may therefore be early (guitar noodling before a song); ends may include
+  applause. Songs are loudness-normalized (-16 LUFS, -1 dB peak ceiling) and
+  encoded as 192 kbps MP3.
+
+Options
+  --help, -h            Show this help
+  --analyze             List the songs found; export nothing
+  --verbose, -v         Also print the per-10-second level chart
+  --out-dir=path        Folder for the MP3s, created if needed     (default: next to the source files)
+                        (--outDir=path also works)
+  --threshold=dB        Mid-band level that counts as music        (default -25)
+  --silence=sec         Quiet time that ends a song                (default 20)
+  --min-minutes=min     Shortest section counted as a song         (default 3)
+  --lufs=dB             Loudness target of the MP3s                (default -16)
+  --pre=sec             Padding added before each song             (default 0.3)
+  --post=sec            Padding added after each song              (default 1)
+  --extend=sec          Max reach-back for drum/bass intros        (default 60)
+  --low-threshold=dB    Drum/bass level for the reach-back         (default -28)
+
+Examples
+  split-songs.mjs --analyze 261001_0071.wav
+  split-songs.mjs 261001_0071.wav 261001_0073.wav   # -> 261001-s01-untitled.mp3 ...
+
+Requires ffmpeg and ffprobe on the PATH. Exits with code 1 on any failure.
+`;
+
+const c = (code, s) => (process.stdout.isTTY ? `\x1b[${code}m${s}\x1b[0m` : s);
+const fail = (msg) => { console.error(c(31, msg)); process.exit(1); };
+
+const args = [];
+for (const a of process.argv.slice(2)) {
+  if (a === '-v') { FLAGS.verbose = true; continue; }
+  if (a === '--help' || a === '-h') { console.log(HELP); process.exit(0); }
+  const m = a.match(/^--([\w-]+)(?:=(.*))?$/);
+  if (!m) { args.push(a); continue; }
+  const [, k, v] = m;
+  if (k === 'analyze') { FLAGS.analyze = true; continue; }
+  if (k === 'verbose') { FLAGS.verbose = true; continue; }
+  const key = k.replace(/-(\w)/g, (_, ch) => ch.toUpperCase());
+  if (key === 'outDir') {
+    if (!v) fail(`Bad value for --${k}`);
+    FLAGS.outDir = path.resolve(v);
+    continue;
+  }
+  if (!(key in SETTINGS)) fail(`Unknown option --${k}`);
+  const n = Number(v);
+  if (v === undefined || v === '' || Number.isNaN(n)) fail(`Bad value for --${k}`);
+  SETTINGS[key] = n;
+}
+
+const fmt = (sec) => {
+  const s = Math.round(sec);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+};
+
+// ffmpeg input args that treat several wav files as one continuous recording.
+function stitchedInput(files) {
+  const list = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'split-songs-')), 'files.txt');
+  fs.writeFileSync(list, files.map((f) => `file '${f.replace(/'/g, "'\\''")}'`).join('\n'));
+  return ['-f', 'concat', '-safe', '0', '-i', list];
+}
+
+function ffmpeg(argv, { capture = false } = {}) {
+  const r = spawnSync('ffmpeg', ['-nostdin', '-v', 'error', '-y', ...argv], {
+    encoding: 'utf8',
+    maxBuffer: 1 << 28,
+    stdio: ['ignore', capture ? 'pipe' : 'inherit', 'pipe'],
+  });
+  if (r.error) fail(`Could not run ffmpeg: ${r.error.message}`);
+  if (r.status !== 0) throw new Error(`ffmpeg failed: ${r.stderr.trim()}`);
+  return r.stdout;
+}
+
+function duration(file) {
+  const r = spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file], { encoding: 'utf8' });
+  const d = parseFloat(r.stdout);
+  if (r.status !== 0 || Number.isNaN(d)) throw new Error(`ffprobe could not read ${file}`);
+  return d;
+}
+
+// One RMS value (dB) per second of the audio passed through the given ffmpeg filters.
+function bandLevels(input, filters) {
+  const af = `aresample=8000,${filters},asetnsamples=n=8000:p=0,`
+    + 'astats=metadata=1:reset=1,ametadata=print:key=lavfi.astats.Overall.RMS_level:file=-';
+  const out = ffmpeg([...input, '-vn', '-ac', '1', '-af', af, '-f', 'null', '-'], { capture: true });
+  return [...out.matchAll(/RMS_level=(\S+)/g)].map((m) => {
+    const v = parseFloat(m[1]);
+    return Number.isFinite(v) ? v : -120;
+  });
+}
+
+const smooth = (levels, w) => levels.map((_, i) => {
+  const part = levels.slice(Math.max(0, i - w), i + w + 1);
+  return part.reduce((a, b) => a + b, 0) / part.length;
+});
+
+function findSongs(levels, lowLevels, total) {
+  const { threshold, silence, minMinutes, pre, post, extend, lowThreshold } = SETTINGS;
+  const on = smooth(levels, 2).map((v) => v > threshold); // 5-second moving average
+  const lowSmooth = smooth(lowLevels, 1);
+
+  const runs = [];
+  let start = null;
+  on.forEach((o, i) => {
+    if (o && start === null) start = i;
+    if (!o && start !== null) { runs.push([start, i]); start = null; }
+  });
+  if (start !== null) runs.push([start, on.length]);
+
+  const merged = [];
+  for (const [a, b] of runs) {
+    const last = merged[merged.length - 1];
+    if (last && a - last[1] < silence) last[1] = b;
+    else merged.push([a, b]);
+  }
+  return merged
+    .filter(([a, b]) => b - a >= minMinutes * 60)
+    .map(([a, b]) => {
+      // Songs can open with drums/bass only, which the mid band misses: reach back while the bass stays loud.
+      let s = a;
+      let misses = 0;
+      for (let t = a - 1; t >= 0 && a - t <= extend && misses <= 2; t--) {
+        if (lowSmooth[t] > lowThreshold) { s = t; misses = 0; } else misses++;
+      }
+      return { start: Math.max(0, s - pre), end: Math.min(total, b + post) };
+    });
+}
+
+function printChart(levels) {
+  const step = 10;
+  console.log(`  Mid-band level per ${step}s (threshold ${SETTINGS.threshold} dB marked with |):`);
+  const col = (db) => Math.max(0, Math.round(db + 50));
+  const mark = col(SETTINGS.threshold);
+  for (let i = 0; i < levels.length; i += step) {
+    const part = levels.slice(i, i + step);
+    const avg = part.reduce((a, b) => a + b, 0) / part.length;
+    const bar = '#'.repeat(col(avg)).padEnd(mark + 1).split('');
+    bar[mark] = bar[mark] === '#' ? '#' : '|';
+    console.log(`  ${fmt(i).padStart(5)} ${avg.toFixed(1).padStart(6)} ${bar.join('')}`);
+  }
+}
+
+function processDay(day, files) {
+  const dir = FLAGS.outDir ?? path.dirname(files[0]);
+  const { threshold, silence, minMinutes, lufs } = SETTINGS;
+  console.log(c(36, `\n▶ ${day}: ${files.map((f) => path.basename(f)).join(' + ')}`));
+
+  const durations = files.map(duration);
+  const total = durations.reduce((a, b) => a + b, 0);
+  const input = stitchedInput(files);
+  console.log(`  Analyzing ${fmt(total)} of audio (threshold ${threshold} dB, gap ≥ ${silence}s, song ≥ ${minMinutes} min)...`);
+  const levels = bandLevels(input, 'highpass=f=500,lowpass=f=3400');
+  const lowLevels = bandLevels(input, 'highpass=f=60,lowpass=f=500');
+  const songs = findSongs(levels, lowLevels, total);
+
+  if (FLAGS.verbose) printChart(levels);
+  if (songs.length === 0) {
+    console.log(c(33, '  No songs found. Try a lower --threshold or a smaller --min-minutes.'));
+    return 0;
+  }
+
+  // Start offset of each file in the stitched recording; a song crossing one is spliced.
+  const boundaries = [];
+  durations.slice(0, -1).reduce((acc, d, i) => {
+    boundaries.push({ at: acc + d, names: [files[i], files[i + 1]].map((f) => path.basename(f)) });
+    return acc + d;
+  }, 0);
+  const splice = (s) => boundaries.find((b) => b.at > s.start && b.at < s.end);
+
+  console.log(c(32, `  Found ${songs.length} song${songs.length === 1 ? '' : 's'} in ${fmt(total)} of audio:`));
+  const labels = songs.map((_, i) => `s${String(i + 1).padStart(2, '0')}`);
+  songs.forEach((s, i) => {
+    const b = splice(s);
+    const note = b ? c(33, `  spliced: ${b.names.join(' + ')} at ${fmt(b.at)}`) : '';
+    console.log(`    ${labels[i]}  ${fmt(s.start)} – ${fmt(s.end)} (${fmt(s.end - s.start)})${note}`);
+  });
+  if (FLAGS.analyze) return 0;
+
+  fs.mkdirSync(dir, { recursive: true });
+  songs.forEach((s, i) => {
+    const out = path.join(dir, `${day}-${labels[i]}-untitled.mp3`);
+    console.log(`  [${i + 1}/${songs.length}] Exporting ${path.basename(out)} ...`);
+    ffmpeg([
+      '-ss', String(s.start), '-t', String(s.end - s.start), ...input, '-vn',
+      '-af', `loudnorm=I=${lufs}:TP=-1:LRA=11`,
+      '-ar', '44100', '-c:a', 'libmp3lame', '-b:a', '192k', out,
+    ]);
+  });
+  console.log(c(32, `  ✓ ${songs.length} MP3${songs.length === 1 ? '' : 's'} saved in ${dir}`));
+  return songs.length;
+}
+
+// Groups files by folder + leading 6-digit date, each group sorted by name.
+function groupByDay(files) {
+  const groups = new Map();
+  for (const f of files) {
+    const abs = path.resolve(f);
+    const { dir, name } = path.parse(abs);
+    const day = name.match(/^\d{6}/)?.[0] ?? name;
+    const key = `${dir}\0${day}`;
+    if (!groups.has(key)) groups.set(key, { day, files: [] });
+    groups.get(key).files.push(abs);
+  }
+  return [...groups.values()].map((g) => ({ ...g, files: [...new Set(g.files)].sort() }));
+}
+
+function main() {
+  if (args.length === 0) {
+    console.error(HELP);
+    process.exit(1);
+  }
+  for (const f of args) {
+    if (!f.toLowerCase().endsWith('.wav') || !fs.existsSync(f)) fail(`Not an existing .wav file: ${f}`);
+  }
+  let total = 0;
+  const days = groupByDay(args);
+  for (const { day, files } of days) {
+    try {
+      total += processDay(day, files);
+    } catch (e) {
+      fail(`  ✕ Failed on ${day}: ${e.message}`);
+    }
+  }
+  if (!FLAGS.analyze) console.log(c(32, `\nDone: ${total} song(s) exported from ${args.length} file(s) over ${days.length} day(s).`));
+}
+
+main();
