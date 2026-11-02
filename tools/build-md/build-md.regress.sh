@@ -12,6 +12,8 @@ bad() { echo "FAIL $1"; fails=$((fails + 1)); }
 # 1. --help exits 0 and mentions options
 node "$tool" --help | grep -q -- '--out-dir' && ok help-outdir || bad help-outdir
 node "$tool" --help | grep -q -- '--media-dir' && ok help-mediadir || bad help-mediadir
+node "$tool" --help | grep -q -- '--yaml-preamble' && ok help-preamble || bad help-preamble
+node "$tool" --help | grep -q -- '--personnel' && ok help-personnel || bad help-personnel
 
 # 2. bad option exits 1
 node "$tool" --bogus=1 >/dev/null 2>&1 && bad badopt || ok badopt
@@ -50,6 +52,15 @@ node "$tool" --in-dir="$tmp/mp3s" --out-dir="$tmp/dates" --media-dir="$tmp/media
 
 # Check content of 240101.md
 expected_240101=$(cat <<'EOF'
+---
+date: 2024-01-01
+title: Monday, January 1, 2024
+---
+
+# Monday, January 1, 2024
+
+## Personnel: TBD
+
 1. [240101-s01-untitled.mp3](media/240101-s01-untitled.mp3)
 2. [240101-s02-untitled.mp3](media/240101-s02-untitled.mp3)
 3. [240101-s16-untitled.mp3](media/240101-s16-untitled.mp3)
@@ -69,6 +80,15 @@ fi
 
 # Check content of 261001.md
 expected_261001=$(cat <<'EOF'
+---
+date: 2026-10-01
+title: Thursday, October 1, 2026
+---
+
+# Thursday, October 1, 2026
+
+## Personnel: TBD
+
 1. [261001-s01-intro.mp3](media/261001-s01-intro.mp3)
 EOF
 )
@@ -80,11 +100,13 @@ else
   bad "content-261001"
 fi
 
-# 6. custom media prefix
+# 6. custom media prefix, personnel, and custom yaml preamble
 mkdir -p "$tmp/mp3s2"
 touch "$tmp/mp3s2/261001-s01-intro.mp3"
-node "$tool" --in-dir="$tmp/mp3s2" --out-dir="$tmp/custom_dates" --media-dir="$tmp/media2" --media-prefix="/audio/media" >/dev/null
+node "$tool" --in-dir="$tmp/mp3s2" --out-dir="$tmp/custom_dates" --media-dir="$tmp/media2" --media-prefix="/audio/media" --personnel="Alice, Bob" --yaml-preamble='layout: concert' >/dev/null
 grep -q '1. \[261001-s01-intro.mp3\](/audio/media/261001-s01-intro.mp3)' "$tmp/custom_dates/261001.md" && ok "custom-media-prefix" || bad "custom-media-prefix"
+grep -q '## Personnel: Alice, Bob' "$tmp/custom_dates/261001.md" && ok "custom-personnel" || bad "custom-personnel"
+grep -q 'layout: concert' "$tmp/custom_dates/261001.md" && ok "custom-preamble" || bad "custom-preamble"
 [[ -f "$tmp/media2/261001-s01-intro.mp3" ]] && ok "moved-custom-media-dir" || bad "moved-custom-media-dir"
 
 # 7. positional file args
@@ -94,7 +116,8 @@ touch "$tmp/mp3s3/240101-s02-untitled.mp3"
 mkdir -p "$tmp/dates_pos"
 mkdir -p "$tmp/media_pos"
 node "$tool" --out-dir="$tmp/dates_pos" --media-dir="$tmp/media_pos" "$tmp/mp3s3/240101-s01-untitled.mp3" "$tmp/mp3s3/240101-s02-untitled.mp3" >/dev/null
-[[ $(wc -l < "$tmp/dates_pos/240101.md") -eq 2 ]] && ok "positional-args" || bad "positional-args"
+[[ -f "$tmp/dates_pos/240101.md" ]] && ok "positional-args-file" || bad "positional-args-file"
+grep -q '# Monday, January 1, 2024' "$tmp/dates_pos/240101.md" && ok "positional-args-h1" || bad "positional-args-h1"
 [[ -f "$tmp/media_pos/240101-s01-untitled.mp3" ]] && ok "moved-positional" || bad "moved-positional"
 [[ ! -f "$tmp/mp3s3/240101-s01-untitled.mp3" ]] && ok "removed-positional" || bad "removed-positional"
 

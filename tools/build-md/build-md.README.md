@@ -4,7 +4,11 @@ Audience: an AI agent modifying or debugging this tool. Read fully before editin
 Installed tool directory: `~/workspace/album-store/tools/build-md/`. The executable is `build-md` (no extension); the adjacent regression script and this README are part of the tool.
 
 ## Purpose
-Linux Node (ESM, no npm deps) CLI. Input: MP3 files (by default in `./01-mp3s/`). Output: Markdown files in `src/dates/` (e.g. `src/dates/240101.md`) and MP3 files moved into `src/media/` (e.g. `src/media/240101-s16-untitled.mp3`). Each markdown file contains an ordered list of song links with URLs located in `media/` (e.g. `1. [240101-s16-untitled.mp3](media/240101-s16-untitled.mp3)`).
+Linux Node (ESM, no npm deps) CLI. Input: MP3 files (by default in `./01-mp3s/`). Output: Markdown files in `src/dates/` (e.g. `src/dates/240101.md`) and MP3 files moved into `src/media/` (e.g. `src/media/240101-s16-untitled.mp3`). Each markdown file contains:
+- Configurable YAML preamble frontmatter
+- Level 1 heading (`#`) with the long-form date (e.g. `# Monday, January 1, 2024`)
+- Level 2 heading (`##`) for personnel (e.g. `## Personnel: TBD`)
+- Ordered list of song links with URLs located in `media/` (e.g. `1. [240101-s16-untitled.mp3](media/240101-s16-untitled.mp3)`)
 
 Files:
 - `build-md` — the tool (single Node.js ESM file, executable).
@@ -14,7 +18,7 @@ Files:
 ## CLI
 ```
 ./build-md [options] [file.mp3 ...]
---help|-h  --verbose|-v  --in-dir=path (alias --inDir=path)  --out-dir=path (alias --outDir=path)  --media-dir=path (alias --mediaDir=path)  --media-prefix=path (alias --mediaPrefix=path)
+--help|-h  --verbose|-v  --in-dir=path (alias --inDir=path)  --out-dir=path (alias --outDir=path)  --media-dir=path (alias --mediaDir=path)  --media-prefix=path (alias --mediaPrefix=path)  --personnel=str  --yaml-preamble=str (alias --yamlPreamble=str)
 ```
 Options use `--key=value` syntax. kebab-case is converted to camelCase keys of `SETTINGS`. `--help` → exit 0. Any failure → red message, **exit code 1**.
 
@@ -25,6 +29,15 @@ Options use `--key=value` syntax. kebab-case is converted to camelCase keys of `
 - Destination for MP3s: `<media-dir>/<filename>` (default: `./src/media/<filename>`).
 - Content format:
 ```markdown
+---
+date: 2024-01-01
+title: Monday, January 1, 2024
+---
+
+# Monday, January 1, 2024
+
+## Personnel: TBD
+
 1. [240101-s01-untitled.mp3](media/240101-s01-untitled.mp3)
 2. [240101-s02-untitled.mp3](media/240101-s02-untitled.mp3)
 ```

@@ -8,6 +8,14 @@ const SETTINGS = {
   outDir: './src/dates',
   mediaDir: './src/media',
   mediaPrefix: 'media',
+  personnel: 'TBD',
+  // YAML frontmatter preamble placed at the top of generated markdown files.
+  // Can be an object of key/values, a template string, or null/false to disable.
+  // Template variables available: {{isoDate}}, {{formattedDate}}, {{date}}, {{personnel}}.
+  yamlPreamble: {
+    date: '{{isoDate}}',
+    title: '{{formattedDate}}',
+  },
 };
 
 const FLAGS = { verbose: false };
@@ -16,8 +24,11 @@ const HELP = `Usage: build-md [options] [file.mp3 ...]
 
 Scans MP3 files (by default in 01-mp3s/) and generates corresponding Markdown
 files in src/dates/ named after the 6-digit date prefix (e.g. 240101.md).
-Each Markdown file contains an ordered list of song links with targets in media/
-(e.g. 1. [240101-s16-untitled.mp3](media/240101-s16-untitled.mp3)).
+Each Markdown file contains:
+  - Configurable YAML preamble frontmatter
+  - Level 1 heading (#) with the long form date (e.g. # Monday, January 1, 2024)
+  - Level 2 heading (##) for personnel (e.g. ## Personnel: TBD)
+  - Ordered list of song links with targets in media/
 Also moves the processed MP3 files into src/media/ (or --media-dir).
 
 Options
@@ -31,6 +42,9 @@ Options
                         (--mediaDir=path also works)
   --media-prefix=path   Prefix for media links in Markdown   (default: media)
                         (--mediaPrefix=path also works)
+  --personnel=str       Personnel value in markdown header   (default: TBD)
+  --yaml-preamble=str   Custom YAML preamble template/JSON   (default: date & title)
+                        (--yamlPreamble=str also works)
 
 Examples
   build-md
@@ -52,12 +66,84 @@ for (const a of process.argv.slice(2)) {
   const [, k, v] = m;
   if (k === 'verbose') { FLAGS.verbose = true; continue; }
   const key = k.replace(/-(\w)/g, (_, ch) => ch.toUpperCase());
-  if (key === 'inDir' || key === 'outDir' || key === 'mediaDir' || key === 'mediaPrefix') {
+  if (key === 'yamlPreamble') {
+    if (v === undefined || v === '') fail(`Bad value for --${k}`);
+    try {
+      SETTINGS.yamlPreamble = JSON.parse(v);
+    } catch {
+      SETTINGS.yamlPreamble = v;
+    }
+    continue;
+  }
+  if (key === 'inDir' || key === 'outDir' || key === 'mediaDir' || key === 'mediaPrefix' || key === 'personnel') {
     if (v === undefined || v === '') fail(`Bad value for --${k}`);
     SETTINGS[key] = v;
     continue;
   }
   fail(`Unknown option --${k}`);
+}
+
+function formatLongDate(dateStr) {
+  const match = dateStr.match(/^(\d{2})(\d{2})(\d{2})/);
+  if (!match) return dateStr;
+  const year = 2000 + parseInt(match[1], 10);
+  const month = parseInt(match[2], 10);
+  const day = parseInt(match[3], 10);
+  const d = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+  if (Number.isNaN(d.getTime())) return dateStr;
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    timeZone: 'UTC',
+  });
+  return formatter.format(d);
+}
+
+function formatIsoDate(dateStr) {
+  const match = dateStr.match(/^(\d{2})(\d{2})(\d{2})/);
+  if (!match) return dateStr;
+  const year = 2000 + parseInt(match[1], 10);
+  const month = match[2];
+  const day = match[3];
+  return `${year}-${month}-${day}`;
+}
+
+function renderYamlPreamble(dateStr, formattedDate) {
+  if (!SETTINGS.yamlPreamble) return '';
+  const isoDate = formatIsoDate(dateStr);
+  const context = {
+    date: dateStr,
+    isoDate,
+    formattedDate,
+    personnel: SETTINGS.personnel,
+  };
+
+  if (typeof SETTINGS.yamlPreamble === 'string') {
+    let raw = SETTINGS.yamlPreamble;
+    for (const [k, val] of Object.entries(context)) {
+      raw = raw.replaceAll(`{{${k}}}`, val);
+    }
+    const trimmed = raw.trim();
+    if (!trimmed) return '';
+    return `---\n${trimmed}\n---\n\n`;
+  }
+
+  if (typeof SETTINGS.yamlPreamble === 'object' && SETTINGS.yamlPreamble !== null) {
+    const lines = ['---'];
+    for (const [k, val] of Object.entries(SETTINGS.yamlPreamble)) {
+      let resolvedVal = String(val);
+      for (const [ctxKey, ctxVal] of Object.entries(context)) {
+        resolvedVal = resolvedVal.replaceAll(`{{${ctxKey}}}`, ctxVal);
+      }
+      lines.push(`${k}: ${resolvedVal}`);
+    }
+    lines.push('---');
+    return lines.join('\n') + '\n\n';
+  }
+
+  return '';
 }
 
 function collectFiles() {
@@ -141,8 +227,12 @@ function main() {
     const songs = dateGroups.get(date);
     songs.sort((a, b) => a.filename.localeCompare(b.filename, undefined, { numeric: true, sensitivity: 'base' }));
 
-    const lines = songs.map((song, idx) => `${idx + 1}. [${song.filename}](${mediaPrefix}/${song.filename})`);
-    const content = lines.join('\n') + '\n';
+    const longDate = formatLongDate(date);
+    const preamble = renderYamlPreamble(date, longDate);
+    const headerSection = `# ${longDate}\n\n## Personnel: ${SETTINGS.personnel}\n\n`;
+
+    const songLines = songs.map((song, idx) => `${idx + 1}. [${song.filename}](${mediaPrefix}/${song.filename})`);
+    const content = `${preamble}${headerSection}${songLines.join('\n')}\n`;
 
     const outFile = path.join(SETTINGS.outDir, `${date}.md`);
     fs.writeFileSync(outFile, content, 'utf8');
